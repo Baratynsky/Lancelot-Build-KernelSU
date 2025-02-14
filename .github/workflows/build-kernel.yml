@@ -60,7 +60,7 @@ jobs:
           zip -r ../kernel.zip .
 
       - name: Upload Kernel ZIP
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v3.1.0
         with:
           name: kernel
           path: kernel.zip
