@@ -1,4 +1,9 @@
 name: Build KernelSU-Next Kernel
+ run:|
+    source config.env
+    echo "CLANG_VERSION=${CLANG_VERSION}" >> $GITHUB_ENV
+    echo "ARCH=${ARCH}" >> $GITHUB_ENV
+    echo "DEVICE=${DEVICE}" >> $GITHUB_ENV
 
 on:
   push:
