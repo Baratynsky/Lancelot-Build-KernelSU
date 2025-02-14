@@ -3,10 +3,10 @@ name: Build Kernel
 on:
   push:
     branches:
-      - main  # Измените на вашу основную ветку, если необходимо
+      - main  # Замените на вашу основную ветку
   pull_request:
     branches:
-      - main  # Измените на вашу основную ветку, если необходимо
+      - main  # Замените на вашу основную ветку
 
 jobs:
   build:
@@ -21,48 +21,46 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y git wget curl unzip
 
-      - name: Download Clang
+      - name: Download ZyC Clang
         run: |
-          wget https://github.com/ZyCromerZ/Clang/releases/download/20.0.0git-20241222-release/Clang-20.0.0git-20241222.tar.gz
-          tar -xzf Clang-20.0.0git-20241222.tar.gz
-          # Проверяем, существует ли директория после извлечения
-          if [ -d "Clang-20.0.0git-20241222" ]; then
-            sudo mv Clang-20.0.0git-20241222 /usr/local/clang
-          else
-            echo "Ошибка: Директория Clang-20.0.0git-20241222 не найдена."
-            exit 1
-          fi
-
-      - name: Set up Clang
-        run: echo "/usr/local/clang/bin" >> $GITHUB_PATH
+          mkdir -p ~/clang
+          wget https://github.com/zydcy/clang/releases/download/21.0.0git/clang-21.0.0git-linux-aarch64.tar.gz
+          tar -xzf clang-21.0.0git-linux-aarch64.tar.gz -C ~/clang --strip-components=1
+          echo "export PATH=\$PATH:~/clang/bin" >> $GITHUB_ENV
 
       - name: Clone Kernel Source
         run: |
-          git clone --depth=1 --branch kernel-tree https://github.com/Jbub5/android_kernel_xiaomi_mt6768.git kernel
+          git clone --depth=1 -b kernel-tree https://github.com/Jbub5/android_kernel_xiaomi_mt6768.git kernel
           cd kernel
           git checkout lancelot_defconfig
+
+      - name: Configure Kernel
+        run: |
+          cd kernel
+          make ARCH=arm64 O=out lancelot_defconfig
 
       - name: Build Kernel
         run: |
           cd kernel
-          export ARCH=arm64
-          export SUBARCH=arm64
-          export CROSS_COMPILE=aarch64-linux-gnu-
-          make lancelot_defconfig
-          make -j$(nproc)  # Используйте количество ядер вашего процессора
+          make -j$(nproc) ARCH=arm64 O=out CC=clang
 
       - name: Clone AnyKernel3
         run: |
-          git clone --depth=1 --branch proton https://github.com/Jbub5/AnyKernel3.git anykernel
+          git clone --depth=1 -b proton https://github.com/Jbub5/AnyKernel3.git anykernel
 
-      - name: Copy Kernel and Modules
+      - name: Copy Kernel to AnyKernel
         run: |
-          cd kernel
-          cp arch/arm64/boot/Image anykernel
-          cp -r out/arch/arm64/boot/dts/* anykernel/dts/
-          cp -r out/lib/modules/* anykernel/modules/
+          cp kernel/out/arch/arm64/boot/Image.gz anykernel
+          cp kernel/out/arch/arm64/boot/dts/**/*.dtb anykernel
+          cp kernel/out/arch/arm64/boot/dts/**/*.img anykernel
 
-      - name: Package Kernel
+      - name: Create ZIP
         run: |
           cd anykernel
-          zip -r ../kernel.zip *
+          zip -r ../kernel.zip .
+
+      - name: Upload Kernel ZIP
+        uses: actions/upload-artifact@v2
+        with:
+          name: kernel
+          path: kernel.zip
