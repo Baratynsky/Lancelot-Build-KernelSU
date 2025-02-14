@@ -25,7 +25,13 @@ jobs:
         run: |
           wget https://github.com/ZyCromerZ/Clang/releases/download/20.0.0git-20241222-release/Clang-20.0.0git-20241222.tar.gz
           tar -xzf Clang-20.0.0git-20241222.tar.gz
-          sudo mv Clang-20.0.0git-20241222 /usr/local/clang
+          # Проверяем, существует ли директория после извлечения
+          if [ -d "Clang-20.0.0git-20241222" ]; then
+            sudo mv Clang-20.0.0git-20241222 /usr/local/clang
+          else
+            echo "Ошибка: Директория Clang-20.0.0git-20241222 не найдена."
+            exit 1
+          fi
 
       - name: Set up Clang
         run: echo "/usr/local/clang/bin" >> $GITHUB_PATH
