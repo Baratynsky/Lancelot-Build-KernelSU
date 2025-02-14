@@ -1,0 +1,77 @@
+name: Build KernelSU-Next Kernel
+
+on:
+  push:
+    branches: [ kernel-tree-wip ]
+  pull_request:
+    branches: [ kernel-tree-wip ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      ARCH: arm64
+      DEVICE: lancelot
+      CLANG_VERSION: clang-r450784d  # Пример для Clang 20
+
+    steps:
+    - name: Checkout Kernel Source
+      uses: actions/checkout@v4
+      with:
+        repository: Jbub5/android_kernel_xiaomi_mt6768
+        ref: kernel-tree-wip
+        path: kernel
+
+    - name: Clone KernelSU-Next
+      run: |
+        git clone https://github.com/tiann/KernelSU -b next ./KernelSU
+
+    - name: Apply KernelSU Patches
+      working-directory: ./kernel
+      run: |
+        ../KernelSU/kernel/setup.sh ./
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential libncurses-dev bison flex libssl-dev bc python3 git
+
+    - name: Setup Clang 20
+      run: |
+        mkdir clang
+        wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/master/$CLANG_VERSION.tar.gz
+        tar -xzf $CLANG_VERSION.tar.gz -C clang
+
+    - name: Configure Kernel
+      working-directory: ./kernel
+      run: |
+        make ARCH=$ARCH O=out ${DEVICE}_defconfig
+        echo "CONFIG_KSU=y" >> out/.config
+        echo "CONFIG_KPROBES=y" >> out/.config
+        echo "CONFIG_OVERLAY_FS=y" >> out/.config
+        make ARCH=$ARCH O=out olddefconfig
+
+    - name: Build Kernel
+      working-directory: ./kernel
+      run: |
+        export PATH="$(pwd)/../clang/bin:$PATH"
+        make -j$(nproc) ARCH=$ARCH O=out \
+            CC=clang \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+
+    - name: Package Boot Image
+      working-directory: ./kernel
+      run: |
+        # Здесь добавьте команды для упаковки boot.img
+        # Пример для MediaTek (может потребовать корректировки):
+        cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
+        cd AnyKernel3
+        zip -r9 ../kernel.zip * -x .gitignore
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: kernel-build
+        path: kernel/kernel.zip
