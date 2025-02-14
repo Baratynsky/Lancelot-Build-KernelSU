@@ -24,8 +24,8 @@ jobs:
       - name: Download ZyC Clang
         run: |
           mkdir -p ~/clang
-          wget https://github.com/zydcy/clang/releases/download/21.0.0git/clang-21.0.0git-linux-aarch64.tar.gz
-          tar -xzf clang-21.0.0git-linux-aarch64.tar.gz -C ~/clang --strip-components=1
+          wget https://github.com/zydcy/clang/releases/download/20.0.0git-20241222/clang-20.0.0git-20241222-linux-aarch64.tar.gz
+          tar -xzf clang-20.0.0git-20241222-linux-aarch64.tar.gz -C ~/clang --strip-components=1
           echo "export PATH=\$PATH:~/clang/bin" >> $GITHUB_ENV
 
       - name: Clone Kernel Source
