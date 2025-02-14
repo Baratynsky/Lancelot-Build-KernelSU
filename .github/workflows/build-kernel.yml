@@ -1,66 +1,88 @@
-name: Build Kernel
+name: Build Kernel with KernelSU
 
 on:
-  push:
-    branches:
-      - main  # Замените на вашу основную ветку
-  pull_request:
-    branches:
-      - main  # Замените на вашу основную ветку
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    env:
+      KERNEL_DIR: android_kernel_xiaomi_mt6768
+      DEFCONFIG: lancelot_defconfig
+      ARCH: arm64
+      SUBARCH: arm64
+      CLANG_DIR: clang
+      ANY_KERNEL_DIR: AnyKernel3
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
+    - name: Checkout Repository
+      uses: actions/checkout@v4
 
-      - name: Set up environment
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y git wget curl unzip
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y build-essential libncurses-dev libssl-dev libelf-dev \
+        flex bison bc dwarves zip ccache python3 git
 
-      - name: Download ZyC Clang
-        run: |
-          mkdir -p ~/clang
-          wget https://github.com/zydcy/clang/releases/download/20.0.0git-20241222/clang-20.0.0git-20241222-linux-aarch64.tar.gz
-          tar -xzf clang-20.0.0git-20241222-linux-aarch64.tar.gz -C ~/clang --strip-components=1
-          echo "export PATH=\$PATH:~/clang/bin" >> $GITHUB_ENV
+    - name: Clone Kernel Source
+      run: |
+        git clone --depth=1 --branch=kernel-tree \
+        https://github.com/Jbub5/android_kernel_xiaomi_mt6768 ${{ env.KERNEL_DIR }}
 
-      - name: Clone Kernel Source
-        run: |
-          git clone --depth=1 -b kernel-tree https://github.com/Jbub5/android_kernel_xiaomi_mt6768.git kernel
-          cd kernel
-          git checkout lancelot_defconfig
+    - name: Setup ZyC Clang
+      run: |
+        mkdir ${{ env.CLANG_DIR }}
+        curl -L https://github.com/ZyCromerZ/clang/releases/download/21.0.0/ZyC-clang-21.0.0.tar.gz | tar -xz -C ${{ env.CLANG_DIR }} --strip-components=1
 
-      - name: Configure Kernel
-        run: |
-          cd kernel
-          make ARCH=arm64 O=out lancelot_defconfig
+    - name: Clone AnyKernel3
+      run: |
+        git clone --depth=1 --branch=proton \
+        https://github.com/Jbub5/AnyKernel3.git ${{ env.ANY_KERNEL_DIR }}
 
-      - name: Build Kernel
-        run: |
-          cd kernel
-          make -j$(nproc) ARCH=arm64 O=out CC=clang
+    - name: Integrate KernelSU
+      working-directory: ${{ env.KERNEL_DIR }}
+      run: |
+        curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s v1.0.3
 
-      - name: Clone AnyKernel3
-        run: |
-          git clone --depth=1 -b proton https://github.com/Jbub5/AnyKernel3.git anykernel
+    - name: Configure Kernel
+      working-directory: ${{ env.KERNEL_DIR }}
+      run: |
+        make O=out CC=${{ github.workspace }}/${{ env.CLANG_DIR }}/bin/clang \
+        ARCH=${{ env.ARCH }} \
+        CLANG_TRIPLE=aarch64-linux-gnu- \
+        CROSS_COMPILE=aarch64-linux-gnu- \
+        CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+        ${{ env.DEFCONFIG }}
 
-      - name: Copy Kernel to AnyKernel
-        run: |
-          cp kernel/out/arch/arm64/boot/Image.gz anykernel
-          cp kernel/out/arch/arm64/boot/dts/**/*.dtb anykernel
-          cp kernel/out/arch/arm64/boot/dts/**/*.img anykernel
+        # Enable KernelSU required options
+        ./scripts/config --file out/.config \
+          -e KPROBES \
+          -e OVERLAY_FS \
+          -e KSU
+        make O=out CC=${{ github.workspace }}/${{ env.CLANG_DIR }}/bin/clang olddefconfig
 
-      - name: Create ZIP
-        run: |
-          cd anykernel
-          zip -r ../kernel.zip .
+    - name: Build Kernel
+      working-directory: ${{ env.KERNEL_DIR }}
+      run: |
+        make -j$(nproc --all) O=out CC=${{ github.workspace }}/${{ env.CLANG_DIR }}/bin/clang \
+        ARCH=${{ env.ARCH }} \
+        CLANG_TRIPLE=aarch64-linux-gnu- \
+        CROSS_COMPILE=aarch64-linux-gnu- \
+        CROSS_COMPILE_ARM32=arm-linux-gnueabi-
 
-      - name: Upload Kernel ZIP
-        uses: actions/upload-artifact@v3.1.0
-        with:
-          name: kernel
-          path: kernel.zip
+    - name: Prepare AnyKernel3
+      run: |
+        cp ${{ env.KERNEL_DIR }}/out/arch/${{ env.ARCH }}/boot/Image.gz-dtb ${{ env.ANY_KERNEL_DIR }}/
+        cp ${{ env.KERNEL_DIR }}/out/arch/${{ env.ARCH }}/boot/dtbo.img ${{ env.ANY_KERNEL_DIR }}/ 2>/dev/null || true
+
+    - name: Create Flashable Zip
+      working-directory: ${{ env.ANY_KERNEL_DIR }}
+      run: |
+        ZIP_NAME="KernelSU-$(date +'%Y%m%d-%H%M').zip"
+        zip -r9 "${ZIP_NAME}" * -x .git*
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Kernel-Zip
+        path: ${{ env.ANY_KERNEL_DIR }}/*.zip
