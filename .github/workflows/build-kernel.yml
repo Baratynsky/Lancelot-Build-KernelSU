@@ -32,7 +32,7 @@ jobs:
     - name: Setup ZyC Clang
       run: |
         mkdir ${{ env.CLANG_DIR }}
-        curl -L https://github.com/ZyCromerZ/clang/releases/download/21.0.0/ZyC-clang-21.0.0.tar.gz | tar -xz -C ${{ env.CLANG_DIR }} --strip-components=1
+        curl -L https://github.com/ZyCromerZ/Clang/archive/refs/tags/21.0.0git-20250214-release.tar.gz | tar -xz -C ${{ env.CLANG_DIR }} --strip-components=1
 
     - name: Clone AnyKernel3
       run: |
